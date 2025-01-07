@@ -1,6 +1,22 @@
-environment:
-  properties:
-    artifactsDir: out/jreleaser/assemble/helloworld/archive
+matrix:
+  rows:
+    - { os: macos,   arch: aarch64, ext: '',     platform: osx-aarch_64     }
+    - { os: macos,   arch: x86_64,  ext: '',     platform: osx-x86_64       }
+    - { os: linux,   arch: aarch64, ext: '',     platform: linux-aarch_64   }
+    - { os: linux,   arch: x86_64,  ext: '',     platform: linux-x86_64     }
+    - { os: windows, arch: aarch64, ext: '.exe', platform: windows-aarch_64 }
+    - { os: windows, arch: x86_64,  ext: '.exe', platform: windows-x86_64   }
+
+hooks:
+  script:
+    before:
+      - run: |
+          mkdir -p target/{{ matrix.arch }}-{{ matrix.os }}
+          zig build-exe src/main.zig -target {{ matrix.arch }}-{{ matrix.os }} \
+          -O ReleaseSmall -femit-bin=target/{{ matrix.arch }}-{{ matrix.os }}/helloworld{{ matrix.ext }}
+        applyDefaultMatrix: true
+        filter:
+          includes: ['assemble']
 
 project:
   name: helloworld
@@ -28,9 +44,10 @@ assemble:
     helloworld:
       active: ALWAYS
       formats: [ ZIP ]
-      attachPlatform: true
+      applyDefaultMatrix: true
+      archiveName: '{{distributionName}}-{{projectVersion}}-{{ matrix.arch }}-{{ matrix.os }}'
       fileSets:
-        - input: 'zig-out/bin'
+        - input: 'target/{{ matrix.arch }}-{{ matrix.os }}'
           output: 'bin'
           includes: [ 'helloworld{.exe,}' ]
         - input: '.'
@@ -38,13 +55,5 @@ assemble:
 
 distributions:
   helloworld:
-    type: BINARY
     executable:
       windowsExtension: exe
-    artifacts:
-      - path: '{{artifactsDir}}/{{distributionName}}-{{projectVersion}}-osx-x86_64.zip'
-        platform: 'osx-x86_64'
-      - path: '{{artifactsDir}}/{{distributionName}}-{{projectVersion}}-windows-x86_64.zip'
-        platform: 'windows-x86_64'
-      - path: '{{artifactsDir}}/{{distributionName}}-{{projectVersion}}-linux-x86_64.zip'
-        platform: 'linux-x86_64'

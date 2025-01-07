@@ -8,35 +8,8 @@ on:
         required: true
 
 jobs:
-  precheck:
-    name: Precheck
-    runs-on: ubuntu-latest
-    outputs:
-      VERSION: ${{ steps.vars.outputs.VERSION }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Cancel previous run
-        uses: styfle/cancel-workflow-action@0.11.0
-        with:
-          access_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Version
-        id: vars
-        shell: bash
-        run: |
-          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-
-  build:
-    needs: [ precheck ]
-    uses: jreleaser/helloworld-zig/.github/workflows/reusable-build.yml@main
-    with:
-      version: ${{ needs.precheck.outputs.VERSION }}
-
   release:
     name: Release
-    needs: [ precheck, build ]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -44,12 +17,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
+      - name: Cancel previous run
+        uses: styfle/cancel-workflow-action@0.12.1
         with:
-          pattern: artifact-*
-          merge-multiple: true
-          path: out/jreleaser/assemble/helloworld/archive
+          access_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Commit version
         run: |
@@ -60,18 +31,40 @@ jobs:
           git commit -a -m "Releasing version ${{ needs.precheck.outputs.VERSION }}"
           git push origin main
 
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+
+      - name: Assemble
+        uses: jreleaser/release-action@v2
+        with:
+          arguments: assemble
+        env:
+          JRELEASER_PROJECT_VERSION: ${{ github.event.inputs.version }}
+          JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: JReleaser assemble output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 1
+          name: jreleaser-assemble
+          path: |
+            out/jreleaser/trace.log
+            out/jreleaser/output.properties
+
       - name: Release
         uses: jreleaser/release-action@v2
         with:
           arguments: release
         env:
-          JRELEASER_PROJECT_VERSION: ${{ needs.precheck.outputs.VERSION }}
+          JRELEASER_PROJECT_VERSION: ${{ github.event.inputs.version }}
           JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: JReleaser output
+      - name: JReleaser release output
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 1
           name: jreleaser-release
           path: |
             out/jreleaser/trace.log

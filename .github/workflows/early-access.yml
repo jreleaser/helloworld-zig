@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Cancel previous run
-        uses: styfle/cancel-workflow-action@0.11.0
+        uses: styfle/cancel-workflow-action@0.12.1
         with:
           access_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -23,18 +23,10 @@ jobs:
         id: vars
         shell: bash
         run: |
-          VERSION=$(cat VERSION)
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-
-  build:
-    needs: [ precheck ]
-    if: endsWith(${{ needs.precheck.outputs.VERSION }}, '-SNAPSHOT')
-    uses: jreleaser/helloworld-zig/.github/workflows/reusable-build.yml@main
-    with:
-      version: ${{ needs.precheck.outputs.VERSION }}
+          echo "VERSION=$(cat VERSION)" >> $GITHUB_OUTPUT
 
   release:
-    needs: [ precheck, build ]
+    needs: [ precheck ]
     if: endsWith(${{ needs.precheck.outputs.VERSION }}, '-SNAPSHOT')
     runs-on: ubuntu-latest
     
@@ -44,23 +36,36 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+
+      - name: Assemble
+        uses: jreleaser/release-action@v2
         with:
-          pattern: artifact-*
-          merge-multiple: true
-          path: out/jreleaser/assemble/helloworld/archive
+          arguments: assemble
+        env:
+          JRELEASER_PROJECT_VERSION: ${{ needs.precheck.outputs.VERSION }}
+          JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: JReleaser assemble output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 1
+          name: jreleaser-assemble
+          path: |
+            out/jreleaser/trace.log
+            out/jreleaser/output.properties
 
       - name: Release
         uses: jreleaser/release-action@v2
         with:
-          version: early-access
           arguments: release
         env:
           JRELEASER_PROJECT_VERSION: ${{ needs.precheck.outputs.VERSION }}
           JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: JReleaser output
+      - name: JReleaser release output
         if: always()
         uses: actions/upload-artifact@v4
         with:
